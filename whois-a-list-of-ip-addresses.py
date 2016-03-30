@@ -53,7 +53,6 @@ def re_match_to_ipv4(m, n=1):
 def cidr_match_to_range_packed(m):
   a, b, c, d, nbits = (0 if m.group(n) is None else int(m.group(n)) for n in (1, 3, 5, 7, 8))
   if a & ~255 or b & ~255 or c & ~255 or d & ~255 or not nbits or nbits & ~31:
-    print '  invalid cidr:', m.groups()
     return None
   # for cidr we need to support notation like 1.2.3.4/5 as well as 1.2/3
 
@@ -64,15 +63,12 @@ def cidr_match_to_range_packed(m):
     ( d        if d else 0)
   )
   mask = (1 << (32-nbits)) - 1
-  print '  mask: %08x' % mask
   assert network & mask == 0
   return network, network | mask
 
 def whois_ipv4(who_ip):
   global db, ipv4_re, ipv4_range_re
-  print 'whois_ipv4', who_ip
   who_ip_packed = str_to_ipv4(who_ip)
-  print '  packed', who_ip_packed
   with contextlib.closing(db.cursor()) as cur:
     data = cur.execute('''
       select
@@ -86,9 +82,7 @@ def whois_ipv4(who_ip):
     ''', [who_ip_packed, who_ip_packed]).fetchone()
 
     if data:
-      print '  cached'
       return data[0]
-    print '  fresh'
 
     whois_r, whois_e = popen2.popen2('whois %s' % who_ip, 0x10000, 'r')
     data = whois_r.read()
@@ -97,21 +91,16 @@ def whois_ipv4(who_ip):
     whois_id = cur.lastrowid
 
     for match in re_searchall(ipv4_range_re, data):
-      print '  ipv4 range:', match.groups()
       ip_low = re_match_to_ipv4(match, 1)
       ip_high = re_match_to_ipv4(match, 5)
-      print '  packed decimal range:', ip_low, ip_high
       #cur.execute('insert into ipv4_range (low, high, whois_id) values (?, ?, ?) on conflict ignore', [ip_low, ip_high, whois_id])
       cur.execute('insert into ipv4_range (low, high, whois_id) values (?, ?, ?)', [ip_low, ip_high, whois_id])
 
     for match in re_searchall(ipv4_cidr_re, data):
-      for n in xrange(9):
-        print '  ipv4 %d cidr: "%s"' % (n, match.group(n))
       cidr = cidr_match_to_range_packed(match)
       if not cidr:
         continue
       ip_low, ip_high = cidr
-      print '  packed decimal cidr range:', ip_low, ip_high
       #cur.execute('insert into ipv4_range (low, high, whois_id) values (?, ?, ?) on conflict ignore', [ip_low, ip_high, whois_id])
       cur.execute('insert into ipv4_range (low, high, whois_id) values (?, ?, ?)', [ip_low, ip_high, whois_id])
 
@@ -129,4 +118,4 @@ with sqlite3.connect(db_filename) as db:
           line = line.rstrip()
           ip_line = ipv4_re.match(line)
           if ip_line:
-            whois_ipv4(line)
+            print whois_ipv4(line)
